@@ -27,7 +27,7 @@ jobs:
             ${{ github.repository_owner }}/mailhog
             ghcr.io/${{ github.repository_owner }}/mailhog
           labels: |
-            org.opencontainers.image.authors="the pygmy stack, Ian Kent (MailHog)""
+            org.opencontainers.image.authors='the pygmy stack, Ian Kent (MailHog)'
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v1
