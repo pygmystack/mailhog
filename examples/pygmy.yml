@@ -1,0 +1,3 @@
+services:
+  amazeeio-mailhog:
+    image: ghcr.io/pygmystack/mailhog:main
