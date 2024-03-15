@@ -1,4 +1,5 @@
 name: Build, Test & Publish
+
 on:
   push:
     branches:
@@ -81,6 +82,8 @@ jobs:
           # list of Docker images to use as base name for tags
           images: |
             ghcr.io/${{ github.repository_owner }}/mailhog
+          flavor: |
+            latest=false
       - 
         name: Find and Replace
         uses: jacobtomlinson/gha-find-replace@v3
@@ -100,33 +103,27 @@ jobs:
           brew install pygmy;
           brew install dockerize;
           echo "/home/linuxbrew/.linuxbrew/bin" >> $GITHUB_PATH;
+          pygmy version;
       - 
-        name: Basic test
+        name: Switch pygmy configs from vanilla to basic
         run: |
+          pygmy status;
+          pygmy clean;
           pygmy --config examples/pygmy.basic.yml pull;
-          pygmy --config examples/pygmy.basic.yml status;
           pygmy --config examples/pygmy.basic.yml up;
+          sleep 10;
           pygmy --config examples/pygmy.basic.yml status;
-          pygmy --config examples/pygmy.basic.yml version;
       - 
         name: Show pygmy image versions
         run: |
           docker ps -a --filter "label=pygmy.name"
       - 
-        name: Export configuration
+        name: Export and show configuration - pygmy.basic.yml
         run: |
           pygmy --config examples/pygmy.basic.yml export -o ./exported-config.yml
-      - 
-        name: Show configuration
-        run: |
           cat ./exported-config.yml
-#      - 
-#        name: SSH Key test
-#        run: |
-#          pygmy addkey /home/runner/.ssh/id_rsa.pub;
-#          pygmy status;
-#          pygmy status | grep 'id_rsa';
-#          docker run --rm -i --volumes-from amazeeio-ssh-agent uselagoon/php-7.4-cli /usr/bin/ssh-add -l | grep 'id_rsa';
+          echo "Checking image references in started containers...";
+          docker container inspect amazeeio-mailhog  | jq '.[].Config.Image' | grep '${{ steps.meta.outputs.tags }}';
       - 
         name: Resolv file test
         run: |
@@ -146,13 +143,16 @@ jobs:
         name: dnsmasq version
         run: |
           docker exec amazeeio-dnsmasq sh -c 'dnsmasq -v' | grep 'Dnsmasq version'
+      -
+        name: ssh version
+        run: |
+          docker exec amazeeio-ssh-agent sh -c 'ssh -V'
       - 
         name: Test the amazeeio-network for expected results
         run: |
           docker network inspect amazeeio-network | jq '.[].Name' | grep "amazeeio-network";
           docker network inspect amazeeio-network | jq '.[].Containers' | jq '.[].Name' | grep "amazeeio-haproxy";
           docker network inspect amazeeio-network | jq '.[].Containers' | jq '.[].Name' | grep "amazeeio-mailhog";
-          docker network inspect amazeeio-network | jq '.[].Containers' | jq '.[].Name' | grep "amazeeio-portainer";
           docker network inspect amazeeio-network | jq '.[].Containers' | jq '.[].IPv4Address';
           docker network inspect amazeeio-network | jq '.[].Containers' | jq '.[].IPv4Address' | grep "10.99.99.";
       - 
@@ -164,9 +164,6 @@ jobs:
           docker inspect amazeeio-haproxy   | jq '.[].Config.Labels["pygmy.hocuspocus"]'  | grep "42";
           docker inspect amazeeio-haproxy   | jq '.[].Config.Labels["pygmy.abracadabra"]' | grep "1";
           docker inspect amazeeio-haproxy   | jq '.[].Config.Labels["pygmy.opensesame"]'  | grep "correct";
-          docker inspect amazeeio-portainer | jq '.[].Config.Labels["pygmy.hocuspocus"]'  | grep "42";
-          docker inspect amazeeio-portainer | jq '.[].Config.Labels["pygmy.abracadabra"]' | grep "1";
-          docker inspect amazeeio-portainer | jq '.[].Config.Labels["pygmy.opensesame"]'  | grep "correct";
           docker inspect amazeeio-ssh-agent | jq '.[].Config.Labels["pygmy.hocuspocus"]'  | grep "42";
           docker inspect amazeeio-ssh-agent | jq '.[].Config.Labels["pygmy.abracadabra"]' | grep "1";
           docker inspect amazeeio-ssh-agent | jq '.[].Config.Labels["pygmy.opensesame"]'  | grep "correct";
@@ -174,18 +171,28 @@ jobs:
           docker inspect amazeeio-mailhog   | jq '.[].Config.Labels["pygmy.abracadabra"]' | grep "1";
           docker inspect amazeeio-mailhog   | jq '.[].Config.Labels["pygmy.opensesame"]'  | grep "correct";
       - 
-        name: Cowsay test
+        name: Switch pygmy configs from basic to vanilla
         run: |
-          pygmy --config examples/pygmy.basic.yml up | grep 'holy ship' || true;
-      - 
-        name: Test the container image overrides configuration
-        run: |
-          echo "Checking image references in started containers...";
-          docker container inspect amazeeio-mailhog   | jq '.[].Config.Image' | grep '${{ steps.meta.outputs.tags }}';
+          pygmy --config examples/pygmy.basic.yml status;
           pygmy --config examples/pygmy.basic.yml clean;
+          pygmy --config examples/pygmy.yml pull;
           pygmy --config examples/pygmy.yml up;
+          sleep 10;
+          pygmy --config examples/pygmy.yml status;
+      - 
+        name: Export and show configuration - pygmy.yml
+        run: |
+          pygmy --config examples/pygmy.yml export -o ./exported-config-2.yml
+          cat ./exported-config-2.yml
           echo "Checking image references in started containers...";
           docker container inspect amazeeio-mailhog   | jq '.[].Config.Image' | grep '${{ steps.meta.outputs.tags }}';
+      - 
+        name: SSH Key test
+        run: |
+          pygmy --config examples/pygmy.yml addkey /home/runner/.ssh/id_rsa;
+          pygmy --config examples/pygmy.yml status;
+          pygmy --config examples/pygmy.yml status | grep 'RSA';
+          docker run --rm -i --volumes-from amazeeio-ssh-agent pygmystack/ssh-agent /usr/bin/ssh-add -l | grep 'RSA';
       - 
         name: Clone the official examples
         run: |
