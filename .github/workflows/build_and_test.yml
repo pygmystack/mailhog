@@ -223,14 +223,14 @@ jobs:
         name: "[Example] Drupal Base"
         run: |
           cd lagoon-examples/drupal-base;
-          docker-compose -p drupal-base up -d;
-          docker-compose -p drupal-base exec -T cli composer install;
+          docker compose -p drupal-base up -d;
+          docker compose -p drupal-base exec -T cli composer install;
           dockerize -wait http://drupal-base.docker.amazee.io:80 -timeout 10s;
           curl --HEAD http://drupal-base.docker.amazee.io;
           curl --HEAD http://drupal-base.docker.amazee.io | grep -i "x-lagoon";
           pygmy --config examples/pygmy.yml status | grep '\- http://drupal-base.docker.amazee.io';
-          docker-compose -p drupal-base down;
-          docker-compose -p drupal-base rm;
+          docker compose -p drupal-base down;
+          docker compose -p drupal-base rm;
           cd ../../;
       - 
         name: Test the stop command
