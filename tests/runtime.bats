@@ -209,52 +209,36 @@ message_total() {
 # Email reception — sending via SMTP
 # ---------------------------------------------------------------------------
 
-@test "an email sent via SMTP is captured by MailHog" {
+@test "an email sent via SMTP is captured with correct From, To, Subject and body" {
     delete_all_messages
     send_test_email \
         "sender@example.com" \
         "recipient@example.com" \
         "BATS Test Email" \
         "Hello from BATS."
+
     local total
     total="$(message_total)"
     [ "${total}" = "1" ]
-}
 
-@test "captured email has the correct From address" {
     run curl -sf "http://localhost:${HTTP_PORT}/api/v1/messages"
     [ "$status" -eq 0 ]
     [[ "$output" =~ "sender@example.com" ]]
-}
-
-@test "captured email has the correct To address" {
-    run curl -sf "http://localhost:${HTTP_PORT}/api/v1/messages"
-    [ "$status" -eq 0 ]
     [[ "$output" =~ "recipient@example.com" ]]
-}
-
-@test "captured email has the correct Subject" {
-    run curl -sf "http://localhost:${HTTP_PORT}/api/v1/messages"
-    [ "$status" -eq 0 ]
     [[ "$output" =~ "BATS Test Email" ]]
-}
-
-@test "captured email body contains expected content" {
-    run curl -sf "http://localhost:${HTTP_PORT}/api/v1/messages"
-    [ "$status" -eq 0 ]
     [[ "$output" =~ "Hello from BATS" ]]
+
+    delete_all_messages
 }
 
 # ---------------------------------------------------------------------------
 # Email deletion
 # ---------------------------------------------------------------------------
 
-@test "all messages can be deleted via the MailHog API" {
+@test "all messages can be deleted via the MailHog API and count returns to zero" {
+    send_test_email "sender@example.com" "recipient@example.com" "Delete Test" "To be deleted."
     run curl -sf -X DELETE "http://localhost:${HTTP_PORT}/api/v1/messages"
     [ "$status" -eq 0 ]
-}
-
-@test "message count is zero after deleting all messages" {
     local total
     total="$(message_total)"
     [ "${total}" = "0" ]
@@ -429,11 +413,6 @@ message_total() {
 @test "nc probe to host.docker.internal:1025 succeeds when MailHog is reachable" {
     # Verify the nc connectivity check itself — the condition that 50-ssmtp.sh
     # evaluates before writing mailhub=host.docker.internal:1025.
-    local mailhog_ip
-    mailhog_ip="$(docker inspect \
-        --format="{{(index .NetworkSettings.Networks \"${MAILHOG_NETWORK}\").IPAddress}}" \
-        "${MAILHOG_CONTAINER}")"
-
     local mailhog_isolated_ip
     mailhog_isolated_ip="$(docker inspect \
         --format="{{(index .NetworkSettings.Networks \"${MAILHOG_ISOLATED_NETWORK}\").IPAddress}}" \
