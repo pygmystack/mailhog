@@ -156,9 +156,9 @@ jobs:
           curl http://docker.amazee.io/stats | grep 'class=px' | grep 'mailhog.docker.amazee.io';
           curl http://docker.amazee.io/stats | grep 'HAProxy version';
       -
-        name: mailhog test
+        name: mailpit test
         run: | 
-          curl http://mailhog.docker.amazee.io | grep 'mailhog/MailHog';
+          curl http://mailhog.docker.amazee.io | grep 'Mailpit';
       -
         name: dnsmasq version
         run: |

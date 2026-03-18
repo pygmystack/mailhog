@@ -1,11 +1,11 @@
 #!/usr/bin/env bats
-# Runtime tests — start a MailHog container and exercise SMTP reception and
+# Runtime tests — start a Mailpit container and exercise SMTP reception and
 # the HTTP API.
 #
 # A dedicated container is started once in setup_file() and torn down in
 # teardown_file().  The container is placed on a private Docker network so
-# that Lagoon-style PHP container tests can reach MailHog via the well-known
-# hostname "amazeeio-mailhog" (matching the alias used by Lagoon's 50-ssmtp.sh
+# that Lagoon-style PHP container tests can reach Mailpit via the well-known
+# hostname "amazeeio-mailpit" (matching the alias used by Lagoon's 50-ssmtp.sh
 # entrypoint).  Host-mapped ports are used for curl-based SMTP sends and
 # API assertions so that the tests work on both Linux and macOS (Docker
 # Desktop).
@@ -19,9 +19,9 @@ IMAGE="${IMAGE_NAME:-pygmystack/mailhog:test}"
 PHP_FPM_IMAGE="${PHP_FPM_IMAGE:-uselagoon/php-8.5-fpm}"
 
 # Populated in setup() from files written by setup_file().
-MAILHOG_CONTAINER=""
-MAILHOG_NETWORK=""
-MAILHOG_ISOLATED_NETWORK=""
+MAILPIT_CONTAINER=""
+MAILPIT_NETWORK=""
+MAILPIT_ISOLATED_NETWORK=""
 SMTP_PORT=""
 HTTP_PORT=""
 
@@ -34,8 +34,8 @@ setup_file() {
     suffix="$(openssl rand -hex 4)"
     echo "${suffix}" > "${BATS_SUITE_TMPDIR}/.suffix"
 
-    local container="mailhog-bats-test-${suffix}"
-    local network="mailhog-bats-net-${suffix}"
+    local container="mailpit-bats-test-${suffix}"
+    local network="mailpit-bats-net-${suffix}"
 
     # Pre-pull the Lagoon PHP image so it is locally cached before any test
     # runs.  Without this, the first test to use the image would trigger an
@@ -48,47 +48,47 @@ setup_file() {
     docker network rm "${network}" 2>/dev/null || true
 
     # Create a dedicated network so the Lagoon-style PHP container tests can
-    # reach MailHog via the "amazeeio-mailhog" hostname without any extra setup.
+    # reach Mailpit via the "amazeeio-mailpit" hostname without any extra setup.
     docker network create "${network}"
     echo "${network}" > "${BATS_SUITE_TMPDIR}/.network"
 
     # Create an isolated (--internal) network for the host.docker.internal
     # tests.  An internal network has no host routing, so the
     # `nc -z -w 1 172.17.0.1 1025` probe in 50-ssmtp.sh reliably fails even
-    # when a pygmy MailHog is listening on the host machine.  This ensures the
+    # when a pygmy Mailpit is listening on the host machine.  This ensures the
     # host.docker.internal branch is the first one that can succeed.
     local isolated_network
     isolated_network="${network}-isolated"
     docker network create --internal "${isolated_network}"
     echo "${isolated_network}" > "${BATS_SUITE_TMPDIR}/.isolated_network"
 
-    # Start MailHog with auto-assigned host ports and on the test network.
+    # Start Mailpit with auto-assigned host ports and on the test network.
     docker run -d \
         --name "${container}" \
         --network "${network}" \
-        --network-alias "amazeeio-mailhog" \
+        --network-alias "amazeeio-mailpit" \
         -p 1025 \
-        -p 8025 \
+        -p 80 \
         "${IMAGE}"
 
-    # Also connect MailHog to the isolated network so that host.docker.internal
+    # Also connect Mailpit to the isolated network so that host.docker.internal
     # tests can reach it without going via the host.
-    docker network connect --alias amazeeio-mailhog "${isolated_network}" "${container}"
+    docker network connect --alias amazeeio-mailpit "${isolated_network}" "${container}"
 
     # Discover the host-mapped ports (handles both 0.0.0.0:PORT and [::]:PORT).
     local smtp_port http_port
     smtp_port="$(docker port "${container}" 1025/tcp | grep -oE '[0-9]+$' | head -1)"
-    http_port="$(docker port "${container}" 8025/tcp | grep -oE '[0-9]+$' | head -1)"
+    http_port="$(docker port "${container}" 80/tcp | grep -oE '[0-9]+$' | head -1)"
     echo "${smtp_port}" > "${BATS_SUITE_TMPDIR}/.smtp_port"
     echo "${http_port}"  > "${BATS_SUITE_TMPDIR}/.http_port"
 
     # Wait up to 30 seconds for the HTTP API to become ready.
     local max_wait=30 waited=0
-    until curl -sf "http://localhost:${http_port}/api/v2/messages" >/dev/null 2>&1; do
+    until curl -sf "http://localhost:${http_port}/api/v1/messages" >/dev/null 2>&1; do
         sleep 1
         waited=$((waited + 1))
         if [ "${waited}" -ge "${max_wait}" ]; then
-            echo "# Timed out waiting for MailHog HTTP API on port ${http_port}" >&3
+            echo "# Timed out waiting for Mailpit HTTP API on port ${http_port}" >&3
             docker logs "${container}" >&3 2>&3
             return 1
         fi
@@ -100,7 +100,7 @@ teardown_file() {
     suffix="$(cat "${BATS_SUITE_TMPDIR}/.suffix" 2>/dev/null || true)"
     network="$(cat "${BATS_SUITE_TMPDIR}/.network" 2>/dev/null || true)"
     isolated_network="$(cat "${BATS_SUITE_TMPDIR}/.isolated_network" 2>/dev/null || true)"
-    docker rm -f "mailhog-bats-test-${suffix}" 2>/dev/null || true
+    docker rm -f "mailpit-bats-test-${suffix}" 2>/dev/null || true
     docker network rm "${isolated_network}" 2>/dev/null || true
     docker network rm "${network}" 2>/dev/null || true
 }
@@ -112,9 +112,9 @@ teardown_file() {
 setup() {
     local suffix
     suffix="$(cat "${BATS_SUITE_TMPDIR}/.suffix" 2>/dev/null || true)"
-    MAILHOG_CONTAINER="mailhog-bats-test-${suffix}"
-    MAILHOG_NETWORK="$(cat "${BATS_SUITE_TMPDIR}/.network" 2>/dev/null || true)"
-    MAILHOG_ISOLATED_NETWORK="$(cat "${BATS_SUITE_TMPDIR}/.isolated_network" 2>/dev/null || true)"
+    MAILPIT_CONTAINER="mailpit-bats-test-${suffix}"
+    MAILPIT_NETWORK="$(cat "${BATS_SUITE_TMPDIR}/.network" 2>/dev/null || true)"
+    MAILPIT_ISOLATED_NETWORK="$(cat "${BATS_SUITE_TMPDIR}/.isolated_network" 2>/dev/null || true)"
     SMTP_PORT="$(cat "${BATS_SUITE_TMPDIR}/.smtp_port" 2>/dev/null || true)"
     HTTP_PORT="$(cat "${BATS_SUITE_TMPDIR}/.http_port"  2>/dev/null || true)"
 }
@@ -124,7 +124,7 @@ setup() {
 # ---------------------------------------------------------------------------
 
 # send_test_email FROM TO SUBJECT BODY
-# Sends an RFC 2822 email to the running MailHog over SMTP using curl.
+# Sends an RFC 2822 email to the running Mailpit over SMTP using curl.
 send_test_email() {
     local from="${1:-sender@example.com}"
     local to="${2:-recipient@example.com}"
@@ -144,14 +144,14 @@ ${body}
 EOF
 }
 
-# delete_all_messages — purges every message from MailHog via its API.
+# delete_all_messages — purges every message from Mailpit via its API.
 delete_all_messages() {
     curl -sf -X DELETE "http://localhost:${HTTP_PORT}/api/v1/messages" >/dev/null
 }
 
-# message_total — returns the integer value of the "total" field from the v2 API.
+# message_total — returns the integer value of the "total" field from the v1 API.
 message_total() {
-    curl -sf "http://localhost:${HTTP_PORT}/api/v2/messages" \
+    curl -sf "http://localhost:${HTTP_PORT}/api/v1/messages" \
         | grep -o '"total":[0-9]*' | cut -d: -f2
 }
 
@@ -160,13 +160,13 @@ message_total() {
 # ---------------------------------------------------------------------------
 
 @test "container is running" {
-    run docker inspect --format='{{.State.Status}}' "${MAILHOG_CONTAINER}"
+    run docker inspect --format='{{.State.Status}}' "${MAILPIT_CONTAINER}"
     [ "$status" -eq 0 ]
     [ "$output" = "running" ]
 }
 
-@test "MailHog process is running inside the container" {
-    run docker exec "${MAILHOG_CONTAINER}" sh -c 'ps | grep "[M]ailHog"'
+@test "mailpit process is running inside the container" {
+    run docker exec "${MAILPIT_CONTAINER}" sh -c 'ps | grep "[m]ailpit"'
     [ "$status" -eq 0 ]
     [ -n "$output" ]
 }
@@ -175,23 +175,16 @@ message_total() {
 # HTTP UI and API
 # ---------------------------------------------------------------------------
 
-@test "MailHog web UI responds with HTML containing 'MailHog'" {
+@test "Mailpit web UI responds with HTML containing 'Mailpit'" {
     run curl -sf "http://localhost:${HTTP_PORT}/"
     [ "$status" -eq 0 ]
-    [[ "$output" =~ "MailHog" ]]
+    [[ "$output" =~ "Mailpit" ]]
 }
 
-@test "MailHog API v2 messages endpoint returns a JSON response with a 'total' field" {
-    run curl -sf "http://localhost:${HTTP_PORT}/api/v2/messages"
-    [ "$status" -eq 0 ]
-    [[ "$output" =~ "total" ]]
-}
-
-@test "MailHog API v1 messages endpoint returns a JSON array or null" {
+@test "Mailpit API v1 messages endpoint returns a JSON object with a 'total' field" {
     run curl -sf "http://localhost:${HTTP_PORT}/api/v1/messages"
     [ "$status" -eq 0 ]
-    # Response is a JSON array when messages exist, or null when empty.
-    [[ "$output" =~ ^\[ ]] || [ "$output" = "null" ]
+    [[ "$output" =~ '"total"' ]]
 }
 
 # ---------------------------------------------------------------------------
@@ -209,7 +202,7 @@ message_total() {
 # Email reception — sending via SMTP
 # ---------------------------------------------------------------------------
 
-@test "an email sent via SMTP is captured by MailHog" {
+@test "an email sent via SMTP is captured by Mailpit" {
     delete_all_messages
     send_test_email \
         "sender@example.com" \
@@ -249,7 +242,7 @@ message_total() {
 # Email deletion
 # ---------------------------------------------------------------------------
 
-@test "all messages can be deleted via the MailHog API" {
+@test "all messages can be deleted via the Mailpit API" {
     run curl -sf -X DELETE "http://localhost:${HTTP_PORT}/api/v1/messages"
     [ "$status" -eq 0 ]
 }
@@ -264,7 +257,7 @@ message_total() {
 # Multiple messages
 # ---------------------------------------------------------------------------
 
-@test "multiple emails sent via SMTP all appear in MailHog" {
+@test "multiple emails sent via SMTP all appear in Mailpit" {
     delete_all_messages
     send_test_email "a@example.com" "x@example.com" "Email One"   "Body one."
     send_test_email "b@example.com" "y@example.com" "Email Two"   "Body two."
@@ -285,14 +278,14 @@ message_total() {
 # container would when SSMTP_MAILHUB is set by an operator.
 # ---------------------------------------------------------------------------
 
-@test "email sent via Lagoon PHP container (ssmtp) is captured by MailHog" {
+@test "email sent via Lagoon PHP container (ssmtp) is captured by Mailpit" {
     delete_all_messages
 
-    # Pass SSMTP_MAILHUB so 50-ssmtp.sh writes mailhub=amazeeio-mailhog:1025
+    # Pass SSMTP_MAILHUB so 50-ssmtp.sh writes mailhub=amazeeio-mailpit:1025
     # into /etc/ssmtp/ssmtp.conf, then send via the real ssmtp sendmail binary.
     run docker run --rm \
-        --network "${MAILHOG_NETWORK}" \
-        -e "SSMTP_MAILHUB=amazeeio-mailhog:1025" \
+        --network "${MAILPIT_NETWORK}" \
+        -e "SSMTP_MAILHUB=amazeeio-mailpit:1025" \
         --entrypoint sh \
         "${PHP_FPM_IMAGE}" -euc '
             . /lagoon/entrypoints/50-ssmtp.sh
@@ -301,7 +294,7 @@ message_total() {
         '
     [ "$status" -eq 0 ]
 
-    # Verify the message arrived in MailHog.
+    # Verify the message arrived in Mailpit.
     local total
     total="$(message_total)"
     [ "${total}" -ge "1" ]
@@ -320,18 +313,18 @@ message_total() {
 #   mailhub=${SSMTP_MAILHUB}
 # directly into /etc/ssmtp/ssmtp.conf and skips all auto-detection.
 # These tests verify that a client honouring SSMTP_MAILHUB successfully
-# delivers mail to MailHog using the configured hub value.
+# delivers mail to Mailpit using the configured hub value.
 # ---------------------------------------------------------------------------
 
-@test "email sent with SSMTP_MAILHUB set to 'amazeeio-mailhog:1025' is captured by MailHog" {
+@test "email sent with SSMTP_MAILHUB set to 'amazeeio-mailpit:1025' is captured by Mailpit" {
     delete_all_messages
 
     # The real 50-ssmtp.sh writes "mailhub=${SSMTP_MAILHUB}" into
     # /etc/ssmtp/ssmtp.conf when SSMTP_MAILHUB is set (lines 20-21).  Dot-
     # source so `return` is handled correctly, then send via ssmtp sendmail.
     run docker run --rm \
-        --network "${MAILHOG_NETWORK}" \
-        -e "SSMTP_MAILHUB=amazeeio-mailhog:1025" \
+        --network "${MAILPIT_NETWORK}" \
+        -e "SSMTP_MAILHUB=amazeeio-mailpit:1025" \
         --entrypoint sh \
         "${PHP_FPM_IMAGE}" -euc '
             . /lagoon/entrypoints/50-ssmtp.sh
@@ -351,7 +344,7 @@ message_total() {
     delete_all_messages
 }
 
-@test "email sent with SSMTP_MAILHUB overrides auto-detection and reaches MailHog" {
+@test "email sent with SSMTP_MAILHUB overrides auto-detection and reaches Mailpit" {
     delete_all_messages
 
     # Confirms the override semantics: SSMTP_MAILHUB is the first branch in
@@ -359,8 +352,8 @@ message_total() {
     # (172.17.0.1, host.docker.internal, LAGOON_PROJECT) regardless of what
     # else might be reachable on the network.
     run docker run --rm \
-        --network "${MAILHOG_NETWORK}" \
-        -e "SSMTP_MAILHUB=amazeeio-mailhog:1025" \
+        --network "${MAILPIT_NETWORK}" \
+        -e "SSMTP_MAILHUB=amazeeio-mailpit:1025" \
         --entrypoint sh \
         "${PHP_FPM_IMAGE}" -euc '
             . /lagoon/entrypoints/50-ssmtp.sh
@@ -384,29 +377,29 @@ message_total() {
 # succeeds it writes "mailhub=host.docker.internal:1025" into ssmtp.conf.
 #
 # An --internal Docker network is used here so that the 172.17.0.1:1025 nc
-# probe reliably fails even when a pygmy MailHog is listening on the host
-# machine (internal networks have no host routing).  The MailHog container is
+# probe reliably fails even when a pygmy Mailpit is listening on the host
+# machine (internal networks have no host routing).  The Mailpit container is
 # connected to both the regular and the isolated network; its IP on the isolated
 # network is injected as host.docker.internal via --add-host so that the nc
-# probe and ssmtp sendmail both resolve to the BATS MailHog.
+# probe and ssmtp sendmail both resolve to the BATS Mailpit.
 # ---------------------------------------------------------------------------
 
-@test "email sent via host.docker.internal route is captured by MailHog" {
+@test "email sent via host.docker.internal route is captured by Mailpit" {
     delete_all_messages
 
     # Use the isolated (--internal) network so that the nc probe to
     # 172.17.0.1:1025 in 50-ssmtp.sh reliably fails — even when a host-level
-    # pygmy MailHog is running — and the host.docker.internal branch becomes
-    # the first probe to succeed.  The MailHog IP on the isolated network is
+    # pygmy Mailpit is running — and the host.docker.internal branch becomes
+    # the first probe to succeed.  The Mailpit IP on the isolated network is
     # injected via --add-host so that nc and ssmtp both resolve it correctly.
-    local mailhog_isolated_ip
-    mailhog_isolated_ip="$(docker inspect \
-        --format="{{(index .NetworkSettings.Networks \"${MAILHOG_ISOLATED_NETWORK}\").IPAddress}}" \
-        "${MAILHOG_CONTAINER}")"
+    local mailpit_isolated_ip
+    mailpit_isolated_ip="$(docker inspect \
+        --format="{{(index .NetworkSettings.Networks \"${MAILPIT_ISOLATED_NETWORK}\").IPAddress}}" \
+        "${MAILPIT_CONTAINER}")"
 
     run docker run --rm \
-        --network "${MAILHOG_ISOLATED_NETWORK}" \
-        --add-host "host.docker.internal:${mailhog_isolated_ip}" \
+        --network "${MAILPIT_ISOLATED_NETWORK}" \
+        --add-host "host.docker.internal:${mailpit_isolated_ip}" \
         --entrypoint sh \
         "${PHP_FPM_IMAGE}" -euc '
             . /lagoon/entrypoints/50-ssmtp.sh
@@ -426,22 +419,17 @@ message_total() {
     delete_all_messages
 }
 
-@test "nc probe to host.docker.internal:1025 succeeds when MailHog is reachable" {
+@test "nc probe to host.docker.internal:1025 succeeds when Mailpit is reachable" {
     # Verify the nc connectivity check itself — the condition that 50-ssmtp.sh
     # evaluates before writing mailhub=host.docker.internal:1025.
-    local mailhog_ip
-    mailhog_ip="$(docker inspect \
-        --format="{{(index .NetworkSettings.Networks \"${MAILHOG_NETWORK}\").IPAddress}}" \
-        "${MAILHOG_CONTAINER}")"
-
-    local mailhog_isolated_ip
-    mailhog_isolated_ip="$(docker inspect \
-        --format="{{(index .NetworkSettings.Networks \"${MAILHOG_ISOLATED_NETWORK}\").IPAddress}}" \
-        "${MAILHOG_CONTAINER}")"
+    local mailpit_isolated_ip
+    mailpit_isolated_ip="$(docker inspect \
+        --format="{{(index .NetworkSettings.Networks \"${MAILPIT_ISOLATED_NETWORK}\").IPAddress}}" \
+        "${MAILPIT_CONTAINER}")"
 
     run docker run --rm \
-        --network "${MAILHOG_ISOLATED_NETWORK}" \
-        --add-host "host.docker.internal:${mailhog_isolated_ip}" \
+        --network "${MAILPIT_ISOLATED_NETWORK}" \
+        --add-host "host.docker.internal:${mailpit_isolated_ip}" \
         --entrypoint sh \
         "${PHP_FPM_IMAGE}" -euc 'nc -z -w 1 host.docker.internal 1025'
     [ "$status" -eq 0 ]
