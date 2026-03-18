@@ -61,7 +61,7 @@ jobs:
 
   test:
     needs: docker
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - 
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -98,19 +98,32 @@ jobs:
           find examples/ -name "*.bak" -delete
           grep -Fn ghcr examples/*
       - 
-        name: Install pygmy, dockerize and bats-core via brew
+        name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@ebe7cd12aeb3c69ccf1a6ba5a4eba5bfdfb00b3b # main
+      -
+        name: Install homebrew packages
         env:
           HOMEBREW_NO_AUTO_UPDATE: 1
           HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
           HOMEBREW_NO_ENV_HINTS: 1
         run: |
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)";
-          brew tap pygmystack/pygmy;
           brew install bats-core;
-          brew install pygmy;
           brew install dockerize;
-          echo "/home/linuxbrew/.linuxbrew/bin" >> $GITHUB_PATH;
+          brew install pygmystack/pygmy/pygmy;
           pygmy version;
+      -
+        name: Pull image for tests
+        run: |
+          docker pull ${{ steps.single_tag.outputs.tag }}
+          docker pull uselagoon/php-8.5-fpm
+      - 
+        name: Run BATS tests
+        env:
+          IMAGE_NAME: ${{ steps.single_tag.outputs.tag }}
+          PHP_FPM_IMAGE: uselagoon/php-8.5-fpm
+        run: |
+          bats --tap tests/image_structure.bats
+          bats --tap tests/runtime.bats
       - 
         name: Switch pygmy configs from vanilla to basic
         run: |
@@ -124,28 +137,13 @@ jobs:
         name: Show pygmy image versions
         run: |
           docker ps -a --filter "label=pygmy.name"
-      -
-        name: Pull image for BATS tests
-        run: |
-          docker pull ${{ steps.single_tag.outputs.tag }}
-          docker pull uselagoon/php-8.5-fpm
-      -
-        name: Run BATS image structure tests
-        env:
-          IMAGE_NAME: ${{ steps.single_tag.outputs.tag }}
-        run: bats --tap tests/image_structure.bats
-      -
-        name: Run BATS runtime tests
-        env:
-          IMAGE_NAME: ${{ steps.single_tag.outputs.tag }}
-        run: bats --tap tests/runtime.bats
       - 
         name: Export and show configuration - pygmy.basic.yml
         run: |
           pygmy --config examples/pygmy.basic.yml export -o ./exported-config.yml
           cat ./exported-config.yml
           echo "Checking image references in started containers...";
-          docker container inspect amazeeio-mailhog  | jq '.[].Config.Image' | grep '${{ steps.meta.outputs.tags }}';
+          docker container inspect amazeeio-mailhog  | jq '.[].Config.Image' | grep -F '${{ steps.single_tag.outputs.tag }}';
       - 
         name: Resolv file test
         run: |
@@ -207,7 +205,7 @@ jobs:
           pygmy --config examples/pygmy.yml export -o ./exported-config-2.yml
           cat ./exported-config-2.yml
           echo "Checking image references in started containers...";
-          docker container inspect amazeeio-mailhog   | jq '.[].Config.Image' | grep '${{ steps.meta.outputs.tags }}';
+          docker container inspect amazeeio-mailhog   | jq '.[].Config.Image' | grep -F '${{ steps.single_tag.outputs.tag }}';
       - 
         name: SSH Key test
         run: |
