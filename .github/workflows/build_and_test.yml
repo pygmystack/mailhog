@@ -13,11 +13,11 @@ on:
 
 jobs:
   ci:
-    uses: pygmystack/.github/.github/workflows/container-build-test-publish.yml@main
+    uses: pygmystack/.github/.github/workflows/container-build-test-publish.yml@legacy-name
     with:
-      image_name: mailhog
-      replace_source: ghcr.io/pygmystack/mailhog:main
-      oc_authors: the pygmy stack, Ian Kent (MailHog)
-      oc_description: MailHog mail testing, configured for use with the pygmy stack
+      image_name: mail
+      replace_source: ghcr.io/pygmystack/mail:main
+      oc_authors: the pygmy stack, axllent (Mailpit)
+      oc_description: Mailpit mail testing, configured for use with the pygmy stack
       extra_pull_images: uselagoon/php-8.5-fpm
     secrets: inherit

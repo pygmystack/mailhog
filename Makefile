@@ -1,5 +1,5 @@
 PHP_FPM_IMAGE ?= uselagoon/php-8.5-fpm
-IMAGE_NAME ?= pygmystack/mailhog
+IMAGE_NAME ?= pygmystack/mail
 IMAGE_TAG  ?= test
 FULL_IMAGE := $(IMAGE_NAME):$(IMAGE_TAG)
 
@@ -37,7 +37,7 @@ test-structure: ## Run image structure tests only (no running container required
 	}
 	IMAGE_NAME=$(FULL_IMAGE) bats --tap tests/image_structure.bats
 
-test-runtime: ## Run runtime and email-flow tests (starts a MailHog container)
+test-runtime: ## Run runtime and email-flow tests (starts a Mail container)
 	@command -v bats >/dev/null 2>&1 || { \
 		echo "Error: bats is not installed. Install with: brew install bats-core"; \
 		exit 1; \

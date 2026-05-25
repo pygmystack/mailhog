@@ -1,7 +1,6 @@
-# the pygmy stack - MailHog image
+# the pygmy stack - mail image, based on Mailpit
 
-This image is a multiarchitecture compatible docker image
+This image is a straight implementation of Mailpit - https://mailpit.axllent.org/
 
-It is based on https://github.com/mailhog/MailHog with the following modifications:
-- the go version for building MailHog has been updated to go 1.16
-- the dockerfile build process has been moved to GitHub actions to enable multiarch
+It is based on https://github.com/axllent/mailpit with the following modifications:
+- A symlink has been added and the the UI port has been modified to match legacy installs

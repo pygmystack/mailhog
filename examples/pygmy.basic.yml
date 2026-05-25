@@ -15,7 +15,7 @@ services:
         - pygmy.opensesame: correct
 
   amazeeio-mailhog:
-    image: ghcr.io/pygmystack/mailhog:main
+    image: ghcr.io/pygmystack/mail:main
     Config:
       Labels:
         - pygmy.hocuspocus: 42
