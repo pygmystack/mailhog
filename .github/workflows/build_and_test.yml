@@ -16,6 +16,7 @@ jobs:
     uses: pygmystack/.github/.github/workflows/container-build-test-publish.yml@legacy-name
     with:
       image_name: mail
+      container_name: mailhog
       replace_source: ghcr.io/pygmystack/mail:main
       oc_authors: the pygmy stack, axllent (Mailpit)
       oc_description: Mailpit mail testing, configured for use with the pygmy stack
